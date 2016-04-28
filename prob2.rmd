@@ -1,0 +1,52 @@
+---
+title: "628 project 3"
+output: html_document
+---
+
+
+```{r}
+library("readr")
+library("dplyr")
+library("ggplot2")
+library("qtlcharts")
+library("stats4")
+datapath <- file.path("https://raw.githubusercontent.com","rqtl/qtl2data/master/B6BTBR")
+geno <- read_csv(file.path(datapath, "b6btbr_geno.csv"),comment="#",na=c("","NA","-"))
+pmap <- read_csv(file.path(datapath, "b6btbr_pmap.csv"),comment="#",col_types=list(col_character(),col_character(),col_double()))
+pheno <- read_csv(file.path(datapath, "b6btbr_pheno.csv"),comment="#")
+covar <- read_csv(file.path(datapath, "b6btbr_covar.csv"),comment="#")
+
+# Plots of Sex
+pheno<-pheno %>% mutate(sex=covar$Sex) %>% arrange(MouseNum)
+ggplot(pheno,aes(log10_insulin_10wk))+geom_histogram(binwidth = 0.1,aes(fill=sex),position="stack")
+ggplot(pheno,aes(log10_insulin_10wk))+geom_density(aes(fill=sex,alpha=0.3),position="dodge")
+plot(pheno$log10_insulin_10wk)
+
+#student t-test
+pheno_male<-pheno %>% filter(sex=="Male") %>% select(log10_insulin_10wk) %>% unlist
+pheno_female<-pheno %>% filter(sex=="Female") %>% select(log10_insulin_10wk) %>% unlist
+pheno_male<-as.numeric(pheno_male)
+pheno_female<-as.numeric(pheno_female)
+pheno_female_new<-c(pheno_female,rep(NA,length.out = 34))
+t.test(pheno_male,pheno_female_new)
+t.test(pheno_male,pheno_female_new,alternative = "less")
+
+# diagnostics
+shapiro.test(pheno_male)
+shapiro.test(pheno_female)
+
+par(mfrow=c(1,2))
+qqnorm(pheno_male, main = "Normal Q-Q Plot for male",
+xlab = "Theoretical Normal Quantiles",
+ylab = "Sample Normal Quantiles",pch=19)
+qqline(pheno_male)
+qqnorm(pheno_female, main = "Normal Q-Q Plot for female",
+xlab = "Theoretical Normal Quantiles",
+ylab = "Sample Normal Quantiles",pch=19)
+qqline(pheno_female)
+
+
+#nonparametrix test
+wilcox.test(pheno_male,pheno_female,conf.int=T)
+```
+
