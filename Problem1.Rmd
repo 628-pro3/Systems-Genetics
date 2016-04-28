@@ -1,0 +1,66 @@
+---
+title: "Probelm1"
+author: "Wenxue Zhang"
+date: "April 28, 2016"
+output: html_document
+---
+
+```{r}
+rm(list=ls())
+library(readr)
+library(mclust)
+library(dplyr)
+library(ggplot2)
+datapath <- file.path("https://raw.githubusercontent.com","rqtl/qtl2data/master/B6BTBR")
+geno <- read_csv(file.path(datapath, "b6btbr_geno.csv"),comment="#",na=c("","NA","-"))
+pmap <- read_csv(file.path(datapath, "b6btbr_pmap.csv"),comment="#",col_types=list(col_character(),col_character(),col_double()))
+pheno <- read_csv(file.path(datapath, "b6btbr_pheno.csv"),comment="#")
+covar <- read_csv(file.path(datapath, "b6btbr_covar.csv"),comment="#")
+```
+
+1.Explore relationships among genotypes.
+```{r}
+pmap<-pmap[-which(pmap$chr=="X"),]
+ggplot(pmap,aes(as.numeric(chr),pos,color=chr))+geom_point()
+simi<-function(x,y){
+  mean(geno[,x]==geno[,y],na.rm=T)
+}
+dis<-function(x,y){
+  abs(pmap$pos[x]-pmap$pos[y])
+}
+
+ss<- NULL
+dd<- NULL
+c<-c()
+tt<-c()
+
+for(t in 1:19){
+  c=which(pmap$chr==t)
+  for(i in c[1]:(c[1]+length(c)-2)){
+    for(j in (i+1):(c[1]+length(c)-1)){
+      ss=c(ss,simi(i+1,j+1))
+      dd=c(dd,dis(i,j))
+      tt=c(tt,t)
+      }
+    }
+  }
+dat <- data.frame(Distance=dd, Similarity=ss, Chr=tt)
+ggplot(dat,aes(Distance,Similarity))+geom_point()+facet_wrap(~Chr)+geom_smooth()
+(1/4)^2+(1/4)^2+(1/2)^2
+
+c1=which(pmap$chr==1)
+dd<-c()
+tt<-c()
+ss<-c()
+for(t in 2:6){
+  c=which(pmap$chr==t)
+  dd=c(dd,dis(c[floor(length(c)/2)],c1))
+  for(i in c1+1){
+  ss=c(ss,simi(c[floor(length(c)/2)]+1,i))
+  tt=c(tt,t)
+  }
+}
+dat<-data.frame(Distance=dd, Similarity=ss,Chr=as.factor(tt))
+ggplot(dat,aes(Distance,Similarity,color=Chr))+geom_point()+geom_hline(yintercept=0.375)
+
+```
