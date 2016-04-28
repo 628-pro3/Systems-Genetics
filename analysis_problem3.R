@@ -57,7 +57,7 @@ ggplot(chrX, aes(x=pos,y=insulin)) +
     geom_point(aes(colour=values)) +
     xlab("position") +
     ylab("log10_insulin_10wk")
-ggsave("chrX.png",width = 9, height = 9, dpi=80)
+ggsave("chr_X.png",width = 9, height = 9, dpi=80)
 
 chr1_19 <- geno_pheno %>%
     filter(chr!="X" & marker!="Sex")
@@ -87,7 +87,7 @@ for (i in 1:19) {
     ggsave(fn_address,width = 9, height = 9, dpi=80)
 }
 
-
+# Stepwise Regression
 ## Modeling
 
 # Chr1
@@ -120,12 +120,12 @@ ggplot(df1,aes(y=r1,x=fitted1)) +
     geom_point() +
     geom_hline(yintercept=0,colour="red",lty=2)
 
-## subset, R2=0.01696
+## subset
 
 fit1.1 <- lm(insulin~rs13475697+rs13475710+rs13475764+rs13475794+rs13475801+rs4222269+rs13476045+rs3685700,data=chr1_mod1_wide, na.action=na.exclude)
 summary(fit1.1)
 
-## subset, R2=0.01696
+## subset
 
 fit1.2 <- lm(insulin~rs13475801*rs13475794,data=chr1_mod1_wide, na.action=na.exclude)
 summary(fit1.2)
@@ -354,13 +354,41 @@ write.table(des, "geno_pheno_wide_des.txt", col.names=FALSE, row.names=FALSE, qu
 
 
 # Random Forest
+naindex = which(is.na(geno),arr.ind = TRUE)
+naindex = naindex[order(naindex[,2]),]
+for(i in 1:dim(naindex)[1] ){
+    row = naindex[i,1]
+    col = naindex[i,2]
+    if(col==2){
+        geno[row,col] = geno[row,col+1]
+    }else if(col==2058){
+        geno[row,col] = geno[row,col-1]
+    }else{
+        left = abs(pmap$pos[col-1]-pmap$pos[col-2])
+        right = abs(pmap$pos[col-1]-pmap$pos[col])
+        if(left > right){
+            geno[row,col] = geno[row, col-1]
+        }else{
+            geno[row,col] = geno[row, col+1]
+        }
+    }
+} 
+
+pheno_2 <- pheno[,c(1,2)]
+covar_2 <- covar[,c(1,2)]
+gp_data <- left_join(pheno_2,covar_2)
+gp_data <- left_join(gp_data,geno)
+gp_data <- gp_data[,-1]
+
 library(randomForest)
-rf <- randomForest(insulin~.,data=geno_pheno_wide,
-                   importance=TRUE,na.action=na.omit)
+write.csv(gp_data, "gp_data.csv",row.names=FALSE)
+gp_data <- read.csv("gp_data.csv")
+str(gp_data)
+rf <- randomForest(log10_insulin_10wk~.,data=gp_data,
+                   na.action = na.omit, importance=TRUE)
 print(rf)
-varImpPlot(rf)
-plot(rf)
-PartialPlot
+varImpPlot(rf, type=1)
+
 
 head(round(importance(rf,type=1),2))
 str(round(importance(rf,type=1),2))
@@ -368,83 +396,58 @@ str(round(importance(rf,type=1),2))
 impVar <- attr(importance(rf,type=1),"dimnames")[[1]][order(importance(rf,type=1),decreasing=TRUE)]
 write.csv(impVar,"impVarList.csv", row.names=FALSE)
 inf_imp_marker <- pmap %>%
-    filter(marker %in% impVar[1:8])
+    filter(marker %in% impVar[1:9])
 write.csv(inf_imp_marker,"inf_imp_marker.csv", row.names=FALSE)
 
+chr7_check <- chr1_19 %>%
+    filter(chr == 7) %>%
+    filter(pos >145 & pos < 152) %>%
+    arrange(pos)
 
+chr19_check1 <- chr1_19 %>%
+    filter(chr == 19) %>%
+    filter(pos > 48 & pos < 50) %>%
+    arrange(pos)
 
+chr19_check2 <- chr1_19 %>%
+    filter(chr == 19) %>%
+    filter(pos > 54 & pos < 56) %>%
+    arrange(pos)
 
 ## RF Modeling
 
-# Chr1 R2=0.004484
-chr1_wide <- chr1 %>%
-    dplyr::select(insulin,values,marker) %>%
-    reshape(timevar="marker", idvar="insulin", direction="wide")
-names(chr1_wide)<-c(names(chr1_wide)[1], gsub("values.","",names(chr1_wide)[-1]))
-
-# Check chr1
-
-pmap_chr1 <- pmap %>%
-    filter(chr == "1")
-ind.marker.chr1 <- which(colnames(geno) %in% pmap_chr1$marker)
-geno_chr1 <- geno[,c(1,ind.marker.chr1)]
-pheno_2 <- pheno %>%
-    dplyr::select(MouseNum,log10_insulin_10wk)
-chr1_check <- merge(geno_chr1,pheno_2)
-chr1_check <- chr1_check[,-1]
-ind_not <- which(!(colnames(chr1_check) %in% colnames(chr1_wide)))
-col_not <- colnames(chr1_check)[ind_not]
-
-rf.fit1 <- lm(insulin~rs13475752+rs4222269+rs13475822+rs13475826+rs13475834,data=chr1_wide)
-summary(rf.fit1)
+rf.mod1 <- lm(log10_insulin_10wk~rs3700241+rs3702235+rs13479570+rs13483654+rs13483658+rs13483681+rs3660143,data=gp_data)
+summary(rf.mod1)
 
 
-rf.df1 = data.frame(residual=rstudent(rf.fit1), fitted.value=fitted(rf.fit1))
+rf.df1 = data.frame(residual=rstudent(rf.mod1), fitted.value=fitted(rf.mod1))
 ggplot(rf.df1,aes(y=residual,x=fitted.value)) +
     geom_point() +
     geom_hline(yintercept=0,colour="red",lty=2)
 
 
-# Overall R2=0.001518
-rf.fit2 <- lm(insulin~rs13475752+rs4222269+rs13475822+rs13475826+rs13475834+rs6234650+rs6244558+rs13483071,data=geno_pheno_wide)
-summary(rf.fit2)
+rf.mod2 <- lm(log10_insulin_10wk~rs3700241+rs3702235+rs13479570+rs13483654+rs13483658+rs13483681+rs3660143+Sex,data=gp_data)
+summary(rf.mod2)
 
-rf.df2 = data.frame(residual=rstudent(rf.fit2), fitted.value=fitted(rf.fit2))
+
+rf.df2 = data.frame(residual=rstudent(rf.mod2), fitted.value=fitted(rf.mod2))
 ggplot(rf.df2,aes(y=residual,x=fitted.value)) +
     geom_point() +
     geom_hline(yintercept=0,colour="red",lty=2)
 
 
-# Overall+sex R2=0.00434
-rf.fit3 <- lm(insulin~rs13475752+rs4222269+rs13475822+rs13475826+rs13475834+rs6234650+rs6244558+rs13483071+Sex,data=geno_pheno_wide)
-summary(rf.fit3)
+rf.mod.1 <- lm(log10_insulin_10wk~rs13479570+rs13483681+rs13483654+rs3660143,data=gp_data)
+summary(rf.mod.1)
 
-rf.df3 = data.frame(residual=rstudent(rf.fit3), fitted.value=fitted(rf.fit3))
-ggplot(rf.df3,aes(y=residual,x=fitted.value)) +
+rf.mod.2 <- lm(log10_insulin_10wk~rs13479570+rs13483681+rs13483654+rs3660143+Sex,data=gp_data)
+summary(rf.mod.2)
+
+anova(rf.mod.1,rf.mod.2)
+
+
+rf.rf = data.frame(residual=rstudent(rf.mod.2), fitted.value=fitted(rf.mod.2))
+ggplot(rf.rf,aes(y=residual,x=fitted.value)) +
     geom_point() +
     geom_hline(yintercept=0,colour="red",lty=2)
-
-
-# Overall+sex＋Chr1 R2=0.00434
-rf.LM.fit4 <- lm(insulin~rs13475697+rs13475710+rs13475729+rs13475752+rs13475764+rs13475794+rs13475801+rs4222269+rs13475822+rs13475826+rs13475834+rs13475912+rs13476045+rs6234650+rs6244558+rs13483071+rs3685700+Sex,data=geno_pheno_wide)
-summary(rf.LM.fit4)
-
-rf.df4 = data.frame(residual=rstudent(rf.LM.fit4), fitted.value=fitted(rf.LM.fit4))
-ggplot(rf.df3,aes(y=residual,x=fitted.value)) +
-    geom_point() +
-    geom_hline(yintercept=0,colour="red",lty=2)
-
-
-
-# Tree R2=0.00434
-tree.fit5 <- lm(insulin~rs13478610+rs13478667+Sex,data=geno_pheno_wide)
-summary(tree.fit5)
-
-tree.df5 = data.frame(residual=rstudent(tree.fit5), fitted.value=fitted(tree.fit5))
-ggplot(tree.df5,aes(y=residual,x=fitted.value)) +
-    geom_point() +
-    geom_hline(yintercept=0,colour="red",lty=2)
-
-
 
 
